@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LAN Chat + File Share</title>
+  <style>
+    body { font-family: Arial; background: #f9f9f9; padding: 1rem; }
+    #messages { height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 1rem; background: white; }
+    .me { text-align: right; color: green; }
+    .other { text-align: left; color: black; }
+    .file { color: blue; }
+    input, button { margin: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h2>LAN IGMP Chat</h2>
+
+  <label>Username:</label>
+  <input type="text" id="username" placeholder="e.g., Nischit" required />
+  
+  <div id="messages"></div>
+
+  <form id="chatForm">
+    <input type="text" id="msgInput" placeholder="Type a message..." required />
+    <button type="submit">Send</button>
+  </form>
+
+  <hr />
+  <form id="fileForm">
+    <input type="file" id="fileInput" />
+    <button type="submit">Upload File</button>
+  </form>
+
+  <script>
+    const messagesDiv = document.getElementById("messages");
+    const ws = new WebSocket(`ws://${location.hostname}:8000/ws`);
+
+    ws.onmessage = (event) => {
+      const data = event.data;
+      try {
+        const obj = JSON.parse(data);
+        if (obj.type === 'file') {
+          addMsg(`${obj.sender} shared file: <a href="${obj.url}" target="_blank">${obj.filename}</a>`, 'file');
+        } else {
+          addMsg(`${obj.sender}: ${obj.message}`, obj.sender === document.getElementById('username').value ? 'me' : 'other');
+        }
+      } catch {
+        addMsg(data, 'other');
+      }
+    };
+
+    document.getElementById("chatForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const user = document.getElementById("username").value.trim();
+      const msg = document.getElementById("msgInput").value.trim();
+      if (!user || !msg) return;
+      ws.send(JSON.stringify({ sender: user, message: msg }));
+      document.getElementById("msgInput").value = "";
+    });
+
+    document.getElementById("fileForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      const user = document.getElementById("username").value.trim();
+      if (!file || !user) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("sender", user);
+
+      await fetch(`http://${location.hostname}:8000/upload`, {
+        method: "POST",
+        body: formData
+      });
+    });
+
+    function addMsg(msg, cls) {
+      const p = document.createElement("p");
+      p.innerHTML = msg;
+      p.className = cls;
+      messagesDiv.appendChild(p);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+  </script>
+</body>
+</html>
